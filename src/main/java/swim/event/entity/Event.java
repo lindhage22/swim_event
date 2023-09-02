@@ -30,10 +30,13 @@ public class Event {
   @ManyToMany(mappedBy = "events")
   
   private Set<Swimmer> swimmers= new HashSet<>();
+
+
+}
  
   
 
-}
+
 
 
   

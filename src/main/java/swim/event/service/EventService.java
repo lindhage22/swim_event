@@ -10,7 +10,6 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import swim.event.controller.model.LocationData;
-import swim.event.controller.model.LocationData.EventData;
 import swim.event.dao.EventDao;
 import swim.event.dao.LocationDao;
 import swim.event.dao.SwimmerDao;
@@ -24,168 +23,183 @@ public class EventService {
 	@Autowired
 	private LocationDao locationDao;
 
-	@Autowired
-	private SwimmerDao swimmerDao;
-
-	@Autowired
-	private EventDao eventDao;
-
+	
 	public LocationData saveLocation(LocationData locationData) {
-		Location location = findOrCreateLocation(locationData.getLocationId());
+		Long locationId = locationData.getLocationId();
+		Location location = findOrCreateLocation(locationId);
+		
 		copyLocationFields(location, locationData);
 
-		Location dbLocation = locationDao.save(location);
-		return new LocationData(dbLocation);
-	}
+		
+		return new LocationData(locationDao.save(location));
+	
 
+	}	
+	private Location findOrCreateLocation(Long locationId) {
+		Location location;
+
+		if (Objects.isNull(locationId)) {
+			location = new Location();
+		} else {
+			location = findLocationById(locationId);
+		}
+
+		return location;	
+		
+					
+	}	
+	private Location findLocationById(Long locationId) {
+		return locationDao.findById(locationId)
+				.orElseThrow(() -> new NoSuchElementException(
+						"Location with ID=" + locationId + " does not exist."));	
+		
+	}	
+	
 	private void copyLocationFields(Location location, LocationData locationData) {
+		location.setLocationId(locationData.getLocationId());
 		location.setPoolName(locationData.getPoolName());
 		location.setStreetAddress(locationData.getStreetAddress());
 		location.setCity(locationData.getCity());
 		location.setState(locationData.getState());
 		location.setZip(locationData.getZip());
-		location.setPhone(locationData.getPhone());
+		location.setPhone(locationData.getPhone());	
 	}
-
-	private Location findOrCreateLocation(Long locationId) {
-		if (Objects.isNull(locationId)) {
-			return new Location();
-		} else {
-			return findLocationById(locationId);
-		}
-	}
-
-	private Location findLocationById(Long locationId) {
-		return locationDao.findById(locationId)
-				.orElseThrow(() -> new NoSuchElementException("Location with ID=" + locationId + " does not exist."));
-	}
-
-	@Transactional(readOnly = true)
-	public LocationData retrieveLocationById(Long locationId) {
-		return new LocationData(findLocationById(locationId));
-	}
-
-	private Swimmer findOrCreateSwimmer(Long swimmerId, Long locationId) {
-		if (Objects.isNull(swimmerId)) {
-			return new Swimmer();
-		} else {
-			return findSwimmerById(swimmerId, locationId);
-		}
-	}
-
-	private void copySwimmerFields(Swimmer swimmer, Swimmer sourceSwimmer) {
-		swimmer.setName(sourceSwimmer.getName());
-		swimmer.setAge(sourceSwimmer.getAge());
-		swimmer.setSchool(sourceSwimmer.getSchool());
-	}
+	
+	
+	@Autowired
+	private SwimmerDao swimmerDao;
 
 	@Transactional(readOnly = false)
-	public Swimmer saveSwimmer(Long locationId, Swimmer sourceSwimmer) {
+	public LocationSwimmer saveSwimmer(Long locationId, LocationSwimmer locationSwimmer) {
 		Location location = findLocationById(locationId);
-
-		Swimmer swimmer = findOrCreateSwimmer(sourceSwimmer.getSwimmerId(), locationId);
-		copySwimmerFields(swimmer, sourceSwimmer);
+		
+		Long swimmerId = locationSwimmer.getSwimmerId();
+		Swimmer swimmer = findOrCreateSwimmer(locationId, swimmerId);
+		
+		copySwimmerFields(swimmer, locationSwimmer);
 		swimmer.setLocation(location);
+		
+		//add swimmer to pool location
 		location.getSwimmers().add(swimmer);
-		Swimmer dbSwimmer = swimmerDao.save(swimmer);
-		return dbSwimmer;
+		
+		return new LocationSwimmer(swimmerDao.save(swimmer));
+		
+	}	
+	
+	private Swimmer findOrCreateSwimmer(Long locationId, Long swimmerId) {
+		Swimmer swimmer;
+
+		if (Objects.isNull(swimmerId)) {
+			swimmer = new Swimmer();
+		} else {
+			swimmer = findSwimmerById(locationId, swimmerId);
+		}
+		return swimmer;
+	
+	
 	}
+	private Swimmer findSwimmerById(Long locationId, Long swimmerId) {
+		Swimmer swimmer = swimmerDao.findById(swimmerId)
+				.orElseThrow(() -> new NoSuchElementException(
+						"Swimmer with ID=" + swimmerId + " does not exist."));
+		
+		//checking for pool location match
 
-	private Event findEventById(Long eventId) {
-		Event event = eventDao.findById(eventId)
-				.orElseThrow(() -> new NoSuchElementException("Event with ID=" + eventId + " does not exist."));
+		if (swimmer.getLocation().getLocationId() != locationId) {
+			throw new IllegalArgumentException(
+					"Swimmer with ID=" + swimmerId + 
+					" is not an swimmer at pool location with ID=" + locationId);
+		} 
+			return swimmer;
+		
+	}
+	
+	private void copySwimmerFields(Swimmer swimmer, LocationSwimmer locationSwimmer) {
+		swimmer.setSwimmerId(locationSwimmer.getSwimmerId());
+		swimmer.setName(locationSwimmer.getName());
+		swimmer.setAge(locationSwimmer.getAge());
+		swimmer.setSchool(locationSwimmer.getSchool());
+		
+	}
+	@Autowired
+	private EventDao eventDao;
 
+	@Transactional(readOnly = false)
+	public LocationEvent saveEvent(Long locationId, LocationEvent locationEvent) {
+		Location location = findLocationById(locationId);
+		
+		Long eventId = locationEvent.getEventId();
+		Event event = findOrCreateEvent(locationId, eventId);
+		
+		copyEventFields(event, locationEvent);
+		event.getLocations().add(location);
+		
+		//add event to pool location
+		
+		location.getEvents().add(event);
+		
+		
+	
+		return new LocationEvent(eventDao.save(event));
+		
+	}
+	private Event findOrCreateEvent(Long locaitonId, Long eventId) {
+		Event event;
+
+		if (Objects.isNull(eventId)) {
+			event = new Event();
+		} else {
+			event = findEventById(locaitonId, eventId);
+		}
 		return event;
 	}
-
-	private Event findOrCreateEvent(Long eventId, Long locationId) {
-		if (Objects.isNull(eventId)) {
-			return new Event();
-		} else {
-			return findEventById(eventId, locationId);
-		}
+	
+	
+	private Event findEventById(Long locationId, Long eventId) {
+		Event event = eventDao.findById(eventId)
+				.orElseThrow(() -> new NoSuchElementException(
+						"Event with ID=" + eventId + " does not exist."));
+		
+		// Checking for swim event ID match with a location for event should not throw an exception,
+		// if the location ID exists, but is not a part of the event data
+		// it simply means that the event should be added to the location via the join table.
+			
+		
+		return event;
 	}
-
-
-
-	private void copyEventFields(Event event, Swimmer swimmerEvent) {
-		event.setName(swimmerEvent.getName());
-	}
-
-	@Transactional(readOnly = false)
-	public EventData saveEvent(Long swimmerEventId, Swimmer swimmerEvent) {
-		Location location = findLocationById(locationId);
-		if (location == null) {
-			throw new IllegalArgumentException("Location with ID=" + locationId + " does not exist.");
-		}
-		Event event = findOrCreateEvent(swimmerEventId,eventId);
-		if (swimmerEvent == null) {
-			throw new IllegalArgumentException("Swimmer event is required.");
-		}
-		copyEventFields(event, swimmerEvent);
-		location.getEvents().add(event);
-		event.getSwimmers().add(swimmerEvent);
-
-		Event dbEvent = eventDao.save(event);
-		return new EventData(dbEvent);
+	
+	private void copyEventFields(Event event, LocationEvent locationEvent) {
+		event.setEventId(locationEvent.getEventId());
+		event.setEventName(locationEvent.getEventName());
 	}
 
 	@Transactional(readOnly = true)
 	public List<LocationData> retrieveAllLocations() {
 		List<Location> locations = locationDao.findAll();
-		List<LocationData> result = new LinkedList<>();
+		List<LocationData> locationDataResult = new LinkedList<>();
 
 		for (Location location : locations) {
-			LocationData locationData = new LocationData(location);
-			locationData.getEvents().clear();
-			locationData.getSwimmers().clear();
-			result.add(locationData);
-		}
-		return result;
-	}
+			LocationData psd = new LocationData(location);
 
+			psd.getEvents().clear();
+			psd.getSwimmers().clear();
+
+			locationDataResult.add(psd);
+		}
+		return locationDataResult;
+	}
+	
+    @Transactional (readOnly =true)
 	public LocationData returnLocationById(Long locationId) {
 		Location location = findLocationById(locationId);
+		
 		return new LocationData(location);
 	}
 
+	@Transactional(readOnly =false)
 	public void deleteLocationById(Long locationId) {
 		Location location = findLocationById(locationId);
 		locationDao.delete(location);
-	}
-
-	private Swimmer findSwimmerById(Long swimmerId, Long eventId) {
-		Swimmer swimmer = swimmerDao.findById(swimmerId)
-				.orElseThrow(() -> new NoSuchElementException("Swimmer with ID=" + swimmerId + "does not exist."));
-		boolean found = false;
-		for (Event event : swimmer.getEvents()) {
-			if (event.getEventId().equals(event)) {
-				found = true;
-				break;
-			}
-		}
-		if (!found) {
-			throw new IllegalArgumentException(
-					"Event with ID=" + eventId + "not found for Swimmer with ID=" + swimmerId);
-
-		}
-		return swimmer;
-
-	}
-
-	public EventService eventfound(Long eventId) {
-		Event foundEvent = findEventById(eventId);
-		return foundEvent != null ? new EventService() : null;
-
-	}
-	public EventData saveEvent(EventData eventData) {
-		Event event = findOrCreateEvent(EventData.getEventId());
-		copyEventFields(event, eventData);
-
-		Event dbEvent = eventDao.save(event);
-		return new EventData(dbEvent);
-
-	
 	}
 
 }
